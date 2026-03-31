@@ -40,7 +40,7 @@ resource "aws_db_subnet_group" "db-subnet-group" {
 resource "aws_db_instance" "ecommerceDB" {
     identifier = "ecommerce-db"
     engine = "postgres"
-    engine_version = "15.4"
+    engine_version = "15.13"
    
     # the instance class
     instance_class = "db.t3.micro" # free tier
@@ -56,7 +56,7 @@ resource "aws_db_instance" "ecommerceDB" {
     vpc_security_group_ids = [ aws_security_group.db-sg.id ]
 
     #backup configuration 
-    backup_retention_period = 7 # it will retain backups for 7 days, daily snapshots and tansaction logs every 5 minutes
+    backup_retention_period = 1 # it will retain backups for 7 days, daily snapshots and tansaction logs every 5 minutes
     backup_window = "03:00-04:00"  # it does daily backups at 3am to 4am everyday
 
     #Maintnance
