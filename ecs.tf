@@ -4,21 +4,19 @@ resource "aws_ecs_cluster" "ecs" {
   name = "ecs-cluster"
 
   setting {
-    name = "containerInsights"
-    value = "enabled"  # enable CloudWatch contenair insights for monitoring
+    name  = "containerInsights"
+    value = "enabled" # enable CloudWatch contenair insights for monitoring
   }
-   
+
   tags = {
     Name = "ecs-cluster"
   }
-
-
 }
 
 # create a CloudWatch logs group name
 
 resource "aws_cloudwatch_log_group" "ecs-logs" {
-  name = "/ecs/ecs-cluster"
+  name              = "/ecs/ecs-cluster"
   retention_in_days = 30
 
   tags = {
@@ -28,12 +26,12 @@ resource "aws_cloudwatch_log_group" "ecs-logs" {
 
 # create an IAM ROLE to give ECS servcie permission to access other services like ECR to pull docker images....
 resource "aws_iam_role" "ecs-role" {
-    name = "EcsTaskExcutionRole"
+  name = "EcsTaskExecutionRole"
 
-    assume_role_policy = jsonencode({
-        Version = "2012-10-17"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
 
-        Statement = [
+    Statement = [
       {
         Action = "sts:AssumeRole"
         Effect = "Allow"
@@ -44,6 +42,31 @@ resource "aws_iam_role" "ecs-role" {
     ]
   })
 }
+# creating an IAM policy to allow container to access sercet manager
+resource "aws_iam_policy" "ecs_secrets" {
+  name        = "ecs-secrets-access"
+  description = "Allow ECS tasks to read database password from Secrets Manager"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = aws_secretsmanager_secret.db_password.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_secrets" {
+  role       = aws_iam_role.ecs-role.name
+  policy_arn = aws_iam_policy.ecs_secrets.arn
+}
+
+
 
 # creating policy attachement to our role
 resource "aws_iam_role_policy_attachment" "ecs_execution" {
@@ -53,18 +76,46 @@ resource "aws_iam_role_policy_attachment" "ecs_execution" {
 
 # create a task definition
 resource "aws_ecs_task_definition" "app" {
-    family = "ecommerce-app"
-    network_mode = "awsvpc"
-    requires_compatibilities = [ "FARGATE" ]
-    cpu = "256"
-    memory = "512"
-    execution_role_arn = aws_iam_role.ecs-role.arn
-    container_definitions = jsonencode([
-        {
+  family                   = "ecommerce-app"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "256"
+  memory                   = "512"
+  execution_role_arn       = aws_iam_role.ecs-role.arn
+
+  # contenair specification
+  container_definitions = jsonencode([
+    {
       name  = "nginx"
-      image = "nginx:alpine"  # Placeholder - public Nginx image
+      image = "nginx:alpine" # Placeholder - public Nginx image
+      # environment variable, to allow contenair to connect with the DATABASE
+      environment = [
+        {
+          name  = "DB_HOST"
+          value = aws_db_instance.ecommerceDB.address
+        },
+        {
+          name  = "DB_PORT"
+          value = "5432"
+        },
+        {
+          name  = "DB_NAME"
+          value = "ecommerceDB"
+        },
+        {
+          name  = "DB_USER"
+          value = "admin"
+        }
+      ]
+      # tell the contenair where to fetch the database's passwrd
+      secrets = [
+        {
+          name      = "DB_PASSWORD"
+          valueFrom = aws_secretsmanager_secret.db_password.arn
+        }
+      ]
+
       essential = true
-      
       portMappings = [
         {
           containerPort = 80
@@ -90,74 +141,74 @@ resource "aws_ecs_task_definition" "app" {
 
 # create an application Load Balancer
 resource "aws_lb" "ecommerce-alb" {
-    name = "ecommerce-alb"
-    internal = false
-    load_balancer_type = "application"
-    security_groups = [ aws_security_group.alb-sg.id ]
-    subnets = [ for subnet in aws_subnet.public: subnet.id ] # creating in the 2 diffrentes subnets
-    enable_deletion_protection = false   # we want to be able to distroy it 
+  name                       = "ecommerce-alb"
+  internal                   = false
+  load_balancer_type         = "application"
+  security_groups            = [aws_security_group.alb-sg.id]
+  subnets                    = [for subnet in aws_subnet.public : subnet.id] # creating in the 2 diffrentes subnets
+  enable_deletion_protection = false                                         # we want to be able to distroy it 
 
-    tags = {
-      Name = "ecommerce-alb"
-    }
+  tags = {
+    Name = "ecommerce-alb"
+  }
 
 }
 
 # create a target group
 resource "aws_alb_target_group" "alb-tg" {
-    name = "alb-tg"
-    port = 80
-    protocol = "HTTP"
-    vpc_id = aws_vpc.main.id
-    target_type = "ip"
+  name        = "alb-tg"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "ip"
 
-    health_check {
-      enabled = true 
-      healthy_threshold = 2 # how many consecutive successeful checks to mark as healthy
-      interval = 30  # how many scends form check to check
-      matcher = "200"  # only 200 status:code is deemed as heathly
-      path = "/"
-      port = "traffic-port"
-      protocol = "HTTP"
-      timeout = 5 # should be less that the interval
-      unhealthy_threshold = 3
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2     # how many consecutive successeful checks to mark as healthy
+    interval            = 30    # how many scends form check to check
+    matcher             = "200" # only 200 status:code is deemed as heathly
+    path                = "/"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5 # should be less that the interval
+    unhealthy_threshold = 3
 
-    }
+  }
 
-    tags = {
-        Name = "ecommerce-alb-tg"
-    }
-  
+  tags = {
+    Name = "ecommerce-alb-tg"
+  }
+
 }
 
 # create listner
 resource "aws_lb_listener" "alb-listner" {
-    load_balancer_arn = aws_lb.ecommerce-alb.arn
-    port = 80
-    protocol = "HTTP"
+  load_balancer_arn = aws_lb.ecommerce-alb.arn
+  port              = 80
+  protocol          = "HTTP"
 
-    default_action {
-      type = "forward"
-      target_group_arn = aws_alb_target_group.alb-tg.arn
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_alb_target_group.alb-tg.arn
 
-    }
+  }
 }
 
 # create ESC services
 resource "aws_ecs_service" "ecs-service" {
-    name = "ecs_service"
-    cluster = aws_ecs_cluster.ecs.id
-    task_definition = aws_ecs_task_definition.app.arn
-    desired_count = 2
-    launch_type = "FARGATE"
+  name            = "ecs_service"
+  cluster         = aws_ecs_cluster.ecs.id
+  task_definition = aws_ecs_task_definition.app.arn
+  desired_count   = 2
+  launch_type     = "FARGATE"
 
-    network_configuration {
+  network_configuration {
     subnets          = [for subnet in aws_subnet.private-subnet : subnet.id]
     security_groups  = [aws_security_group.ecs-sg.id]
-    assign_public_ip = false  # Private tasks, no public IPs
+    assign_public_ip = false # Private tasks, no public IPs
   }
 
-   load_balancer {
+  load_balancer {
     target_group_arn = aws_alb_target_group.alb-tg.arn
     container_name   = "nginx"
     container_port   = 80

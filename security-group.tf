@@ -94,3 +94,14 @@ resource "aws_security_group" "db-sg" {
         Name = "db-sg"
     }
 }
+
+resource "aws_security_group_rule" "db-rule" {
+    description = "Allow ECS to talk to the database"
+    type = "ingress"
+    to_port = 5043
+    from_port = 5043
+    protocol = "tcp"
+    security_group_id = aws_security_group.db-sg.id
+    source_security_group_id = aws_security_group.ecs-sg.id
+  
+}
