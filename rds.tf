@@ -28,7 +28,7 @@ resource "aws_secretsmanager_secret_version" "db-password" {
 resource "aws_db_subnet_group" "db-subnet-group" {
     name = "ecommerce-db-subnet"
     description = "these are the pivate subnets where i will host my database "
-    subnet_ids = [ for subnet in aws_subnet_private-subnet: subnet.id ]
+    subnet_ids = [ for subnet in aws_subnet.private-subnet: subnet.id ]
 
     tags = {
       Name = "ecommerce-db-subnet"

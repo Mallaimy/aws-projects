@@ -55,7 +55,7 @@ resource "aws_iam_policy" "ecs_secrets" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = aws_secretsmanager_secret.db_password.arn
+        Resource = aws_secretsmanager_secret.db-password.arn
       }
     ]
   })
@@ -111,7 +111,7 @@ resource "aws_ecs_task_definition" "app" {
       secrets = [
         {
           name      = "DB_PASSWORD"
-          valueFrom = aws_secretsmanager_secret.db_password.arn
+          valueFrom = aws_secretsmanager_secret.db-password.arn
         }
       ]
 
