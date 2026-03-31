@@ -104,7 +104,7 @@ resource "aws_ecs_task_definition" "app" {
         },
         {
           name  = "DB_USER"
-          value = "admin"
+          value = "dbadmin"
         }
       ]
       # tell the contenair where to fetch the database's passwrd

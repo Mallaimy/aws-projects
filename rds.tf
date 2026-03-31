@@ -48,7 +48,7 @@ resource "aws_db_instance" "ecommerceDB" {
 
     #database name and master/user credential
     db_name = "ecommerceDB"
-    username = "admin"
+    username = "dbadmin"
     password = random_password.db-password.result
 
     # network placement
